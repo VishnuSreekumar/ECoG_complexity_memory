@@ -1,0 +1,79 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Cmd+Shift+Enter*. 
+
+```{r}
+#install.packages("mediation")
+library("mediation")
+
+mydata = read.csv("sa_ent_dat.csv")
+mydata = as.data.frame(scale(mydata))
+# Full fit needs to be done with PLS or some method that accounts for correlated variables.
+# full.fit <- glm(accuracy ~ t_band_power + slope + sa_ent, data = mydata)
+# summary(full.fit)
+
+### MEDIATION ANALYSIS
+
+#1. Is the power to accuracy relationship mediated by slope?
+model.0 <- lm(accuracy ~ t_band_power, data = mydata)
+summary(model.0)
+
+model.M <- lm(slope ~ t_band_power, data = mydata) # mediator model
+summary(model.M)
+
+model.Y <- lm(accuracy ~ t_band_power + slope, data = mydata)
+summary(model.Y)
+
+
+```
+
+```{r}
+results1 <- mediate(model.M, model.Y, treat='t_band_power', mediator='slope',
+                   boot=TRUE, sims=5000)
+summary(results1)
+```
+
+```{r}
+#2. Is the power to accuracy relationship mediated by sampEn?
+model.0 <- lm(accuracy ~ t_band_power, data = mydata)
+summary(model.0)
+
+model.M <- lm(sa_ent ~ t_band_power, data = mydata) # mediator model
+summary(model.M)
+
+model.Y <- lm(accuracy ~ t_band_power + sa_ent, data = mydata)
+summary(model.Y)
+```
+
+```{r}
+results2 <- mediate(model.M, model.Y, treat='t_band_power', mediator='sa_ent',
+                   boot=TRUE, sims=5000)
+summary(results2)
+```
+
+```{r}
+#3. Is the slope to accuracy relationship mediated by sampEn?
+model.0 <- lm(accuracy ~ slope, data = mydata)
+summary(model.0)
+
+model.M <- lm(sa_ent ~ slope, data = mydata) # mediator model
+summary(model.M)
+
+model.Y <- lm(accuracy ~ slope + sa_ent, data = mydata)
+summary(model.Y)
+```
+
+```{r}
+results3 <- mediate(model.M, model.Y, treat='slope', mediator='sa_ent',
+                   boot=TRUE, sims=5000)
+summary(results3)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
