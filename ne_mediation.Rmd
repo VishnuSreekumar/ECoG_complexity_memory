@@ -74,6 +74,71 @@ results3 <- mediate(model.M, model.Y, treat='slope', mediator='sa_ent',
 summary(results3)
 ```
 
+```{r}
+## Mediation may not be the most appropriate analysis
+# Mediation tests a causal chain: X --> M --> Y.
+# #1 and #2 above. Change in low freq power causes change in slope (or sampEn) and change in slope (or sampEn) causes change in performance -- this mediation is tested in #1 and #2 above. May be justifiable.
+
+# #2 above. Change in slope causes change in entropy is a weird thing to test. More likely is that the same underlying activity changes caused both slope and entropy to change. This should just be tested using multiple linear regression and looking at unique and shared variance, etc. This possibility also holds for both #1 and #2 --> the same activity changes cause parallel changes in power, slope, and entropy. So MLR is appropriate for all analyses. 
+
+# R package 'yhat' provides commanility analyses. 
+
+#install.packages("yhat")
+library("yhat")
+mydata = read.csv("sa_ent_dat.csv")
+mydata = as.data.frame(scale(mydata))
+# Do all possible subsets regression
+aps.results <- aps(mydata,"accuracy",c("t_band_power","slope","sa_ent"))
+commonality(aps.results)
+
+```
+
+```{r}
+dominance(aps.results)
+```
+
+```{r}
+lm.out<-lm(accuracy~t_band_power*slope,data=mydata)
+#calc.yhat(lm.out,prec=3)
+#effect.size(lm.out)
+regr(lm.out)  # report beta weights, commonality coefs, and effect sizes
+
+# There is no evidence that the effect of slope on accuracy is moderated by power (i.e., there is no sig interaction effect)
+```
+
+```{r}
+lm.out<-lm(accuracy~t_band_power+slope+sa_ent,data=mydata)
+#calc.yhat(lm.out,prec=3)
+#effect.size(lm.out)
+regr(lm.out)
+```
+
+```{r}
+# Calculate partial correlations
+#install.packages("ppcor")
+library("ppcor")
+pcor(mydata, method = "spearman")  # partial correlation with variation from other variables only removed from both variables of the pair
+spcor(mydata, method = "spearman")  # semi-partial correlation with variation from other variables only removed from the second variable of the pair
+
+# What we want are the semi-partial correlations between power/slope/entropy and accuracy (second variable)
+# power ~ accuracy Spearman's spc = -0.31, p=.048
+# slope ~ accuracy                   0.09, p = .562
+# sa_ent ~ accuracy                  0.23, p = .154
+```
+
+```{r}
+lm.out<-lm(accuracy~t_band_power+slope,data=mydata)
+#calc.yhat(lm.out,prec=3)
+#effect.size(lm.out)
+regr(lm.out)
+```
+```{r}
+lm.out<-lm(accuracy~t_band_power+sa_ent,data=mydata)
+#calc.yhat(lm.out,prec=3)
+#effect.size(lm.out)
+regr(lm.out)
+```
+
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
 
 When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file).
