@@ -9,7 +9,9 @@ Try executing this chunk by clicking the *Run* button within the chunk or by pla
 
 ```{r}
 #install.packages("mediation")
+#install.packages("car")
 library("mediation")
+library("car")
 
 mydata = read.csv("sa_ent_dat.csv")
 mydata = as.data.frame(scale(mydata))
@@ -89,22 +91,24 @@ mydata = read.csv("sa_ent_dat.csv")
 mydata = as.data.frame(scale(mydata))
 # Do all possible subsets regression
 aps.results <- aps(mydata,"accuracy",c("t_band_power","slope","sa_ent"))
-commonality(aps.results)
-
+aps.results
+#commonality(aps.results)
+citation("yhat")
 ```
+
 
 ```{r}
-dominance(aps.results)
+commonalityCoefficients(mydata, "accuracy",c("t_band_power","slope","sa_ent"), imat=FALSE)
+
+pmat = matrix(c(mydata$slope,mydata$sa_ent),nrow=length(mydata$slope),ncol=2)
+rcorr(pmat, type="spearman")
+
+res2 = rcorr(as.matrix(mydata), type = c("spearman"))
+res2$r
+res2$P
 ```
 
-```{r}
-lm.out<-lm(accuracy~t_band_power*slope,data=mydata)
-#calc.yhat(lm.out,prec=3)
-#effect.size(lm.out)
-regr(lm.out)  # report beta weights, commonality coefs, and effect sizes
 
-# There is no evidence that the effect of slope on accuracy is moderated by power (i.e., there is no sig interaction effect)
-```
 
 ```{r}
 lm.out<-lm(accuracy~t_band_power+slope+sa_ent,data=mydata)
@@ -114,16 +118,125 @@ regr(lm.out)
 ```
 
 ```{r}
+lm.out<-lm(accuracy~t_band_power+sa_ent,data=mydata)
+#calc.yhat(lm.out,prec=3)
+#effect.size(lm.out)
+regr(lm.out)
+```
+```{r}
+lm.out<-lm(accuracy~t_band_power+slope,data=mydata)
+#calc.yhat(lm.out,prec=3)
+#effect.size(lm.out)
+regr(lm.out)
+```
+
+```{r}
+## ASSESSING LINEAR REGRESSION ASSUMPTIONS
+
+library("car")
+# Evaluate homoscedasticity
+# non-constant error variance test
+ncvTest(lm.out)
+# plot studentized residuals vs. fitted values 
+spreadLevelPlot(lm.out)
+
+# Test for Autocorrelated Errors
+durbinWatsonTest(lm.out)
+
+# Model assumptions
+# install.packages("gvlma")
+library("gvlma")
+gvmodel <- gvlma(lm.out) 
+summary(gvmodel)
+
+# Evaluate Collinearity
+vif(lm.out) # variance inflation factors 
+sqrt(vif(lm.out)) #> 2 # problem?
+
+# Assessing Outliers
+outlierTest(lm.out) # Bonferonni p-value for most extreme obs
+qqPlot(lm.out, main="QQ Plot") #qq plot for studentized resid 
+leveragePlots(lm.out) # leverage plots
+
+
+# Non-normality of residuals
+qqPlot(lm.out, main="QQ Plot")
+
+library(MASS)
+sresid <- studres(lm.out) 
+hist(sresid, freq=FALSE, 
+   main="Distribution of Studentized Residuals")
+xfit<-seq(min(sresid),max(sresid),length=40) 
+yfit<-dnorm(xfit) 
+lines(xfit, yfit)
+
+# Influence Plot 
+influencePlot(lm.out,	id.method="identify", main="Influence Plot", sub="Circle size is proportial to Cook's Distance" )
+```
+
+```{r}
+# Relative weights
+relweights = rlw(mydata, "accuracy",c("t_band_power","slope","sa_ent"))
+#sum(relweights) # should sum to multiple R-squared of the regression
+```
+
+```{r}
 # Calculate partial correlations
 #install.packages("ppcor")
 library("ppcor")
 pcor(mydata, method = "spearman")  # partial correlation with variation from other variables only removed from both variables of the pair
-spcor(mydata, method = "spearman")  # semi-partial correlation with variation from other variables only removed from the second variable of the pair
-
+spcorr = spcor(mydata, method = "spearman")  # semi-partial correlation with variation from other variables only removed from the second variable of the pair
+spcorr$estimate
 # What we want are the semi-partial correlations between power/slope/entropy and accuracy (second variable)
 # power ~ accuracy Spearman's spc = -0.31, p=.048
 # slope ~ accuracy                   0.09, p = .562
 # sa_ent ~ accuracy                  0.23, p = .154
+```
+
+```{r}
+## PARTIAL LEAST SQUARES REGRESSION 
+#  since we have correlated IVs
+
+#install.packages("plsdepot")
+#install.packages("pls")
+library(pls)
+plsfit1 <- plsr(accuracy ~ t_band_power + slope + sa_ent, ncomp = 2, data = mydata, validation = "LOO")
+summary(plsfit1)
+
+plot(RMSEP(plsfit1), legendpos = "topright")
+
+plot(plsfit1, plottype = "scores", comps = 1:2)
+explvar(plsfit1)
+
+
+# Prediction exercise
+trainrows = sample.int(43, size = 21)
+testrows  = setdiff(1:43,trainrows)
+accTrain = mydata[trainrows,]
+accTest = mydata[head(testrows,-1),]
+plsfit1 <- plsr(accuracy ~ t_band_power + slope + sa_ent, data = accTrain, validation = "CV")
+summary(plsfit1)
+predictedAcc = predict(plsfit1, newdata = accTest)
+# Test set RMSEP
+RMSEP(plsfit1, newdata = accTest)
+
+predplot(plsfit1, ncomp = 2, newdata = accTest, asp = 1, line = TRUE)
+
+# Selecting number of components using cross validation
+ncomp.onesigma <- selectNcomp(plsfit1, method = "onesigma", plot = TRUE, ylim = c(.18, 2))
+ncomp.permut <- selectNcomp(plsfit1, method = "randomization", plot = TRUE, ylim = c(.18, 2))
+
+
+```
+
+```{r}
+## RIDGE REGRESSION
+#install.packages("tidyverse")
+#install.packages("broom")
+#install.packages("glmnet")
+library(tidyverse)
+library(broom)
+library(glmnet)
 ```
 
 ```{r}
@@ -137,6 +250,18 @@ lm.out<-lm(accuracy~t_band_power+sa_ent,data=mydata)
 #calc.yhat(lm.out,prec=3)
 #effect.size(lm.out)
 regr(lm.out)
+```
+
+```{r}
+lm.out<-lm(accuracy~t_band_power*slope,data=mydata)
+#calc.yhat(lm.out,prec=3)
+#effect.size(lm.out)
+regr(lm.out)  # report beta weights, commonality coefs, and effect sizes
+
+aps.results <- aps(mydata,"accuracy",c("t_band_power","slope","sa_ent"))
+domOut = dominance(aps.results)
+dombin(domOut)
+
 ```
 
 Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
